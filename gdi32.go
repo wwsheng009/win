@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
+//go:build windows
 // +build windows
 
 package win
@@ -11,6 +12,19 @@ import (
 	"unsafe"
 
 	"golang.org/x/sys/windows"
+)
+
+/* Text Alignment Options */
+const (
+	TA_NOUPDATECP = 0
+	TA_UPDATECP   = 1
+	TA_LEFT       = 0
+	TA_RIGHT      = 2
+	TA_CENTER     = 6
+	TA_TOP        = 0
+	TA_BOTTOM     = 8
+	TA_BASELINE   = 24
+	TA_RTLREADING = 256
 )
 
 // GetDeviceCaps index constants
@@ -1108,6 +1122,7 @@ var (
 	setPixelFormat          *windows.LazyProc
 	setStretchBltMode       *windows.LazyProc
 	setTextColor            *windows.LazyProc
+	setTextAlign            *windows.LazyProc
 	setViewportOrgEx        *windows.LazyProc
 	saveDC                  *windows.LazyProc
 	startDoc                *windows.LazyProc
@@ -1188,6 +1203,7 @@ func init() {
 	setPixelFormat = libgdi32.NewProc("SetPixelFormat")
 	setStretchBltMode = libgdi32.NewProc("SetStretchBltMode")
 	setTextColor = libgdi32.NewProc("SetTextColor")
+	setTextAlign = libgdi32.NewProc("SetTextAlign")
 	setViewportOrgEx = libgdi32.NewProc("SetViewportOrgEx")
 	startDoc = libgdi32.NewProc("StartDocW")
 	startPage = libgdi32.NewProc("StartPage")
@@ -1875,6 +1891,15 @@ func SetStretchBltMode(hdc HDC, iStretchMode int32) int32 {
 	return int32(ret)
 }
 
+//The SetTextAlign function sets the text-alignment flags for the specified device context.
+//If the function succeeds, the return value is the previous text-alignment setting.
+func SetTextAlign(hdc HDC, align uint32) uint32 {
+	ret, _, _ := syscall.Syscall(setTextAlign.Addr(), 2,
+		uintptr(hdc),
+		uintptr(align),
+		0)
+	return uint32(ret)
+}
 func SetTextColor(hdc HDC, crColor COLORREF) COLORREF {
 	ret, _, _ := syscall.Syscall(setTextColor.Addr(), 2,
 		uintptr(hdc),
