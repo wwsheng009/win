@@ -14,6 +14,19 @@ import (
 	"golang.org/x/sys/windows"
 )
 
+// Specifies how to use the application-defined rectangle. This parameter can be one or more of the following values.
+const (
+	ETO_OPAQUE            = 0x0002
+	ETO_CLIPPED           = 0x0004
+	ETO_GLYPH_INDEX       = 0x0010
+	ETO_RTLREADING        = 0x0080
+	ETO_NUMERICSLOCAL     = 0x0400
+	ETO_NUMERICSLATIN     = 0x0800
+	ETO_IGNORELANGUAGE    = 0x1000
+	ETO_PDY               = 0x2000
+	ETO_REVERSE_INDEX_MAP = 0x10000
+)
+
 /* Text Alignment Options */
 const (
 	TA_NOUPDATECP = 0
@@ -767,6 +780,26 @@ const (
 	SIMPLEREGION  = 2
 	COMPLEXREGION = 3
 )
+const (
+	/* Binary raster ops */
+	R2_BLACK       = 1  /*  0       */
+	R2_NOTMERGEPEN = 2  /* DPon     */
+	R2_MASKNOTPEN  = 3  /* DPna     */
+	R2_NOTCOPYPEN  = 4  /* PN       */
+	R2_MASKPENNOT  = 5  /* PDna     */
+	R2_NOT         = 6  /* Dn       */
+	R2_XORPEN      = 7  /* DPx      */
+	R2_NOTMASKPEN  = 8  /* DPan     */
+	R2_MASKPEN     = 9  /* DPa      */
+	R2_NOTXORPEN   = 10 /* DPxn     */
+	R2_NOP         = 11 /* D        */
+	R2_MERGENOTPEN = 12 /* DPno     */
+	R2_COPYPEN     = 13 /* P        */
+	R2_MERGEPENNOT = 14 /* PDno     */
+	R2_MERGEPEN    = 15 /* DPo      */
+	R2_WHITE       = 16 /*  1       */
+	R2_LAST        = 16
+)
 
 // AlphaBlend operations
 const (
@@ -1053,8 +1086,10 @@ type BLENDFUNCTION struct {
 
 var (
 	// Library
-	libgdi32   *windows.LazyDLL
-	libmsimg32 *windows.LazyDLL
+	// libgdi32   *windows.LazyDLL
+	// libmsimg32 *windows.LazyDLL
+	libgdi32   = windows.NewLazySystemDLL("gdi32.dll")
+	libmsimg32 = windows.NewLazySystemDLL("msimg32.dll")
 
 	// Functions
 	abortDoc                *windows.LazyProc
@@ -1065,6 +1100,7 @@ var (
 	choosePixelFormat       *windows.LazyProc
 	closeEnhMetaFile        *windows.LazyProc
 	combineRgn              *windows.LazyProc
+	selectClipRgn           *windows.LazyProc
 	copyEnhMetaFile         *windows.LazyProc
 	createBitmap            *windows.LazyProc
 	createCompatibleBitmap  *windows.LazyProc
@@ -1130,13 +1166,17 @@ var (
 	stretchBlt              *windows.LazyProc
 	swapBuffers             *windows.LazyProc
 	textOut                 *windows.LazyProc
+	extTextOut              *windows.LazyProc
 	transparentBlt          *windows.LazyProc
+	arc                     *windows.LazyProc
+	setROP2                 = libgdi32.NewProc("SetROP2") // *windows.LazyProc
+	getClipBox              = libgdi32.NewProc("GetClipBox")
 )
 
 func init() {
 	// Library
-	libgdi32 = windows.NewLazySystemDLL("gdi32.dll")
-	libmsimg32 = windows.NewLazySystemDLL("msimg32.dll")
+	// libgdi32 = windows.NewLazySystemDLL("gdi32.dll")
+	// libmsimg32 = windows.NewLazySystemDLL("msimg32.dll")
 
 	// Functions
 	abortDoc = libgdi32.NewProc("AbortDoc")
@@ -1158,6 +1198,7 @@ func init() {
 	createIC = libgdi32.NewProc("CreateICW")
 	createPatternBrush = libgdi32.NewProc("CreatePatternBrush")
 	createRectRgn = libgdi32.NewProc("CreateRectRgn")
+	selectClipRgn = libgdi32.NewProc("SelectClipRgn")
 	deleteDC = libgdi32.NewProc("DeleteDC")
 	deleteEnhMetaFile = libgdi32.NewProc("DeleteEnhMetaFile")
 	deleteObject = libgdi32.NewProc("DeleteObject")
@@ -1210,10 +1251,15 @@ func init() {
 	stretchBlt = libgdi32.NewProc("StretchBlt")
 	swapBuffers = libgdi32.NewProc("SwapBuffers")
 	textOut = libgdi32.NewProc("TextOutW")
+	extTextOut = libgdi32.NewProc("ExtTextOutW")
+
+	arc = libmsimg32.NewProc("Arc")
 
 	alphaBlend = libmsimg32.NewProc("AlphaBlend")
 	gradientFill = libmsimg32.NewProc("GradientFill")
 	transparentBlt = libmsimg32.NewProc("TransparentBlt")
+	// setROP2 = libmsimg32.NewProc("SetROP2")
+
 }
 
 func AbortDoc(hdc HDC) int32 {
@@ -1422,7 +1468,14 @@ func CreatePatternBrush(hbmp HBITMAP) HBRUSH {
 
 	return HBRUSH(ret)
 }
+func SelectClipRgn(hdc HDC, hrgn HRGN) int32 {
+	ret, _, _ := syscall.SyscallN(selectClipRgn.Addr(),
+		uintptr(hdc),
+		uintptr(hrgn),
+		0)
 
+	return int32(ret)
+}
 func CreateRectRgn(nLeftRect, nTopRect, nRightRect, nBottomRect int32) HRGN {
 	ret, _, _ := syscall.Syscall6(createRectRgn.Addr(), 4,
 		uintptr(nLeftRect),
@@ -1977,6 +2030,21 @@ func TextOut(hdc HDC, nXStart, nYStart int32, lpString *uint16, cchString int32)
 	return ret != 0
 }
 
+//https://docs.microsoft.com/en-us/windows/win32/api/wingdi/nf-wingdi-exttextoutw
+//cchString 字符串长度，可以使用-1代表是null结束？
+func ExtTextOut(hdc HDC, nXStart, nYStart int32, options uint32, lpRect *RECT, lpString *uint16, cchString int32, lpDx *int) bool {
+	ret, _, _ := syscall.SyscallN(extTextOut.Addr(),
+		uintptr(hdc),
+		uintptr(nXStart),
+		uintptr(nYStart),
+		uintptr(options),
+		uintptr(unsafe.Pointer(lpRect)),
+		uintptr(unsafe.Pointer(lpString)),
+		uintptr(cchString),
+		uintptr(unsafe.Pointer(lpDx)),
+		0)
+	return ret != 0
+}
 func TransparentBlt(hdcDest HDC, xoriginDest, yoriginDest, wDest, hDest int32, hdcSrc HDC, xoriginSrc, yoriginSrc, wSrc, hSrc int32, crTransparent uint32) bool {
 	ret, _, _ := syscall.Syscall12(transparentBlt.Addr(), 11,
 		uintptr(hdcDest),
@@ -1993,4 +2061,27 @@ func TransparentBlt(hdcDest HDC, xoriginDest, yoriginDest, wDest, hDest int32, h
 		0)
 
 	return ret != 0
+}
+
+func Arc(hdc HDC, x1, y1, x2, y2, x3, y3, x4, y4 int) bool {
+	ret, _, _ := arc.Call(
+		uintptr(hdc),
+		uintptr(x1),
+		uintptr(y1),
+		uintptr(x2),
+		uintptr(y2),
+		uintptr(x3),
+		uintptr(y3),
+		uintptr(x4),
+		uintptr(y4),
+	)
+	return ret != 0
+}
+func SetROP2(hdc HDC, rop2 int32) int32 {
+	ret, _, _ := setROP2.Call(uintptr(hdc), uintptr(rop2))
+	return int32(ret)
+}
+func GetClipBox(hdc HDC, lpRect *RECT) int32 {
+	ret, _, _ := getClipBox.Call(uintptr(hdc), uintptr(unsafe.Pointer(lpRect)))
+	return int32(ret)
 }

@@ -872,7 +872,7 @@ const (
 	WM_MOUSEMOVE              = 512
 	WM_LBUTTONDOWN            = 513
 	WM_LBUTTONUP              = 514
-	WM_LBUTTONDBLCLK          = 515
+	WM_LBUTTONDBLCLK          = 0x0203 //515
 	WM_RBUTTONDOWN            = 516
 	WM_RBUTTONUP              = 517
 	WM_RBUTTONDBLCLK          = 518
@@ -1753,8 +1753,11 @@ func GET_Y_LPARAM(lp uintptr) int32 {
 }
 
 var (
+
 	// Library
-	libuser32 *windows.LazyDLL
+	libuser32 = windows.NewLazySystemDLL("user32.dll")
+	// Library
+	// libuser32 *windows.LazyDLL
 
 	// Functions
 	addClipboardFormatListener  *windows.LazyProc
@@ -1899,13 +1902,18 @@ var (
 	windowFromDC                *windows.LazyProc
 	windowFromPoint             *windows.LazyProc
 	postThreadMessage           *windows.LazyProc
+	getCapture                  *windows.LazyProc
+	frameRect                   = libuser32.NewProc("FrameRect")
+	loadCursorFromFile          = libuser32.NewProc("LoadCursorFromFileW")
+	clipCursor                  = libuser32.NewProc("ClipCursor")
+	getClipCursor               = libuser32.NewProc("GetClipCursor")
+	checkMenuItem               = libuser32.NewProc("CheckMenuItem")
+	appendMenu                  = libuser32.NewProc("AppendMenuW")
 )
 
 func init() {
-	is64bit := unsafe.Sizeof(uintptr(0)) == 8
 
-	// Library
-	libuser32 = windows.NewLazySystemDLL("user32.dll")
+	is64bit := unsafe.Sizeof(uintptr(0)) == 8
 
 	// Functions
 	addClipboardFormatListener = libuser32.NewProc("AddClipboardFormatListener")
@@ -2061,6 +2069,8 @@ func init() {
 	windowFromPoint = libuser32.NewProc("WindowFromPoint")
 
 	postThreadMessage = libuser32.NewProc("PostThreadMessageW")
+
+	getCapture = libuser32.NewProc("GetCapture")
 }
 
 func AddClipboardFormatListener(hwnd HWND) bool {
@@ -3074,6 +3084,25 @@ const (
 	RDW_NOFRAME = 0x0800
 )
 
+// func RedrawWindow(hWnd HWND, lprcUpdate *RECT, hrgnUpdate HRGN, flags uint32) bool {
+// 	//invalid the whole erea
+// 	empty := RECT{0, 0, 0, 0}
+
+// 	lp := uintptr(unsafe.Pointer(lprcUpdate))
+// 	if empty == *lprcUpdate {
+// 		lp = 0
+// 	}
+// 	ret, _, _ := syscall.Syscall6(redrawWindow.Addr(), 4,
+// 		uintptr(hWnd),
+// 		lp,
+// 		uintptr(hrgnUpdate),
+// 		uintptr(flags),
+// 		0,
+// 		0)
+
+// 	return ret != 0
+// }
+
 func RedrawWindow(hWnd HWND, lprcUpdate *RECT, hrgnUpdate HRGN, flags uint32) bool {
 	ret, _, _ := syscall.Syscall6(redrawWindow.Addr(), 4,
 		uintptr(hWnd),
@@ -3508,5 +3537,57 @@ func PostThreadMessage(idThread uint32, Msg uint32, wParam, lParam uintptr) bool
 		wParam,
 		lParam)
 
+	return ret != 0
+}
+func GetCapture() HWND {
+	ret, _, _ := getCapture.Call()
+
+	return HWND(ret)
+}
+func FrameRect(hDC HDC, lprc *RECT, hbr HBRUSH) bool {
+	ret, _, _ := frameRect.Call(
+		uintptr(hDC),
+		uintptr(unsafe.Pointer(lprc)),
+		uintptr(hbr),
+	)
+
+	return ret != 0
+}
+func LoadCursorFromFile(filename *uint16) HCURSOR {
+	ret, _, _ := loadCursorFromFile.Call(
+		uintptr(unsafe.Pointer(filename)),
+	)
+
+	return HCURSOR(ret)
+}
+func ClipCursor(lpRect *RECT) bool {
+	ret, _, _ := clipCursor.Call(
+		uintptr(unsafe.Pointer(lpRect)),
+	)
+	return ret != 0
+}
+func GetClipCursor(lpRect *RECT) bool {
+
+	ret, _, _ := getClipCursor.Call(
+		uintptr(unsafe.Pointer(lpRect)),
+	)
+	return ret != 0
+
+}
+func CheckMenuItem(hMenu HMENU, uIDCheckItem uint32, uCheck uint32) int32 {
+	ret, _, _ := checkMenuItem.Call(
+		uintptr(hMenu),
+		uintptr(uIDCheckItem),
+		uintptr(uCheck),
+	)
+	return int32(ret)
+}
+func AppendMenu(hMenu HMENU, uFlags uint32, uIDNewItem uint32, lpNewItem *uint16) bool {
+	ret, _, _ := appendMenu.Call(
+		uintptr(hMenu),
+		uintptr(uFlags),
+		uintptr(uIDNewItem),
+		uintptr(unsafe.Pointer(lpNewItem)),
+	)
 	return ret != 0
 }
