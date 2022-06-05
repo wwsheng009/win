@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
+//go:build windows
 // +build windows
 
 package win
@@ -76,6 +77,10 @@ func UTF16PtrToString(s *uint16) string {
 
 func MAKEINTRESOURCE(id uintptr) *uint16 {
 	return (*uint16)(unsafe.Pointer(id))
+}
+
+func GET_WHEEL_DELTA_WPARAM(dw uintptr) int16 {
+	return int16(HIWORD(uint32(dw)))
 }
 
 func BoolToBOOL(value bool) BOOL {
