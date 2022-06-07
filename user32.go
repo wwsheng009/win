@@ -1909,6 +1909,8 @@ var (
 	getClipCursor               = libuser32.NewProc("GetClipCursor")
 	checkMenuItem               = libuser32.NewProc("CheckMenuItem")
 	appendMenu                  = libuser32.NewProc("AppendMenuW")
+	isWindow                    = libuser32.NewProc("IsWindow")
+	validateRect                = libuser32.NewProc("ValidateRect")
 )
 
 func init() {
@@ -2825,7 +2827,16 @@ func InvalidateRect(hWnd HWND, lpRect *RECT, bErase bool) bool {
 
 	return ret != 0
 }
+func ValidateRect(hWnd HWND, lpRect *RECT) bool {
+	ret, _, _ := validateRect.Call(uintptr(hWnd),
+		uintptr(unsafe.Pointer(lpRect)))
+	// ret, _, _ := syscall.Syscall(invalidateRect.Addr(), 3,
+	// 	uintptr(hWnd),
+	// 	uintptr(unsafe.Pointer(lpRect)),
+	// 	uintptr(BoolToBOOL(bErase)))
 
+	return ret != 0
+}
 func IsChild(hWndParent, hWnd HWND) bool {
 	ret, _, _ := syscall.Syscall(isChild.Addr(), 2,
 		uintptr(hWndParent),
@@ -2876,6 +2887,15 @@ func IsWindowVisible(hWnd HWND) bool {
 		uintptr(hWnd),
 		0,
 		0)
+
+	return ret != 0
+}
+func IsWindow(hWnd HWND) bool {
+	ret, _, _ := isWindow.Call(uintptr(hWnd))
+	// ret, _, _ := syscall.Syscall(isWindow.Addr(), 1,
+	// 	uintptr(hWnd),
+	// 	0,
+	// 	0)
 
 	return ret != 0
 }

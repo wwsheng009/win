@@ -1171,6 +1171,7 @@ var (
 	arc                     *windows.LazyProc
 	setROP2                 = libgdi32.NewProc("SetROP2") // *windows.LazyProc
 	getClipBox              = libgdi32.NewProc("GetClipBox")
+	setWindowOrgEx          = libgdi32.NewProc("SetWindowOrgEx")
 )
 
 func init() {
@@ -2083,5 +2084,9 @@ func SetROP2(hdc HDC, rop2 int32) int32 {
 }
 func GetClipBox(hdc HDC, lpRect *RECT) int32 {
 	ret, _, _ := getClipBox.Call(uintptr(hdc), uintptr(unsafe.Pointer(lpRect)))
+	return int32(ret)
+}
+func SetWindowOrgEx(hdc HDC, x, y int32, lpPoint *POINT) int32 {
+	ret, _, _ := setWindowOrgEx.Call(uintptr(hdc), uintptr(x), uintptr(y), uintptr(unsafe.Pointer(lpPoint)))
 	return int32(ret)
 }
